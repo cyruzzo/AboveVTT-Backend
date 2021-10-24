@@ -48,7 +48,7 @@ exports.handler = async event => {
     }
   });
 
-  // STORE TOKEN DATA IN DYNAMODB.
+  // STORE/UPDATE TOKEN DATA IN DYNAMODB.
   if(recvMessage.eventType=="custom/myVTT/token"){
     const objectId="scenes#"+recvMessage.sceneId+"#tokens#"+recvMessage.data.id;
     const putParams = {
@@ -66,6 +66,28 @@ exports.handler = async event => {
       return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
     }
   }
+  // TEMPORARY WAY OF STORING SCENE DATA INTO DYNAMODB FOR PREPARING THE FUTURE SWITCH. WE DISCARD TOKENS, DRAWINGS, AND REVELEAD FOG
+  if(recvMessage.eventType=="custom/myVTT/scene"){
+    const objectId="scenes#"+recvMessage.data.id+"#scenedata";
+    delete recvMessage.data.tokens;
+    delete recvMessage.data.reveals;
+    delete recvMessage.data.drawings;
+    const putParams = {
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        campaignId: campaignId,
+        objectId: objectId,
+        data: recvMessage.data,
+        timestamp: Date.now(),
+      }
+    };
+    try {
+      await ddb.put(putParams).promise();
+    } catch (err) {
+      return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
+    }
+  }
+
 
   try {
     await Promise.all(postCalls);
