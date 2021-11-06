@@ -12,6 +12,7 @@ exports.handler = async event => {
 
   const campaignId=recvMessage.campaignId;
   const senderId=event.requestContext.connectionId;
+  console.log("Campaign "+campaignId+" Event: "+recvMessage.eventType);
 
   try {
     connectionData = await ddb.query({
@@ -36,19 +37,16 @@ exports.handler = async event => {
     if(connectionId==senderId){
       return;
     }
-    try {
-      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: event.body }).promise();
-    } catch (e) {
+    const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: event.body }).promise();
+    return postCall.catch(function(e){
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);
-        await ddb.delete({ TableName: TABLE_NAME, Key: { campaignId: campaignId, objectId: objectId } }).promise();
-      } else {
-        throw e;
+        return ddb.delete({ TableName: TABLE_NAME, Key: { campaignId: campaignId, objectId: objectId } }).promise();
       }
-    }
+    });
   });
 
-  // STORE/UPDATE TOKEN DATA IN DYNAMODB.
+  // STORE/UPDATE TOKEN DATA IN DYNAMODB. JFF
   if(recvMessage.eventType=="custom/myVTT/token"){
     const objectId="scenes#"+recvMessage.sceneId+"#tokens#"+recvMessage.data.id;
     const putParams = {

@@ -1,0 +1,11 @@
+{
+  "name": "keepalive",
+  "version": "1.0.0",
+  "description": "AboveVTT Keepalive",
+  "main": "src/app.js",
+  "author": "Daniele Martini",
+  "license": "AGPLv3",
+  "dependencies": {
+    "aws-sdk": "^2.690.0"
+  }
+}

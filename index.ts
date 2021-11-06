@@ -38,7 +38,7 @@ class ChatAppStack extends Stack {
             code: new AssetCode('./onconnect'),
             handler: 'app.handler',
             runtime: Runtime.NODEJS_12_X,
-            timeout: Duration.seconds(300),
+            timeout: Duration.seconds(30),
             memorySize: 256,
             environment: {
                 "TABLE_NAME": tableName,
@@ -51,7 +51,7 @@ class ChatAppStack extends Stack {
             code: new AssetCode('./ondisconnect'),
             handler: 'app.handler',
             runtime: Runtime.NODEJS_12_X,
-            timeout: Duration.seconds(300),
+            timeout: Duration.seconds(30),
             memorySize: 256,
             environment: {
                 "TABLE_NAME": tableName,
@@ -60,11 +60,19 @@ class ChatAppStack extends Stack {
 
         table.grantReadWriteData(disconnectFunc)
 
+        const keepaliveFunc = new Function(this, 'keepalive-lambda', {
+            code: new AssetCode('./keepalive'),
+            handler: 'app.handler',
+            runtime: Runtime.NODEJS_12_X,
+            timeout: Duration.seconds(2),
+            memorySize: 128,
+        });
+
         const messageFunc = new Function(this, 'message-lambda', {
             code: new AssetCode('./sendmessage'),
             handler: 'app.handler',
             runtime: Runtime.NODEJS_12_X,
-            timeout: Duration.seconds(300),
+            timeout: Duration.seconds(30),
             memorySize: 256,
             initialPolicy: [
                 new PolicyStatement({
@@ -90,7 +98,8 @@ class ChatAppStack extends Stack {
             resources: [
                 connectFunc.functionArn,
                 disconnectFunc.functionArn,
-                messageFunc.functionArn
+                messageFunc.functionArn,
+                keepaliveFunc.functionArn,
             ],
             actions: ["lambda:InvokeFunction"]
         });
@@ -119,6 +128,12 @@ class ChatAppStack extends Stack {
             integrationUri: "arn:aws:apigateway:" + config["region"] + ":lambda:path/2015-03-31/functions/" + messageFunc.functionArn + "/invocations",
             credentialsArn: role.roleArn,
         })
+        const keepaliveIntegration = new CfnIntegration(this, "keepalive-lambda-integration", {
+            apiId: api.ref,
+            integrationType: "AWS_PROXY",
+            integrationUri: "arn:aws:apigateway:" + config["region"] + ":lambda:path/2015-03-31/functions/" + keepaliveFunc.functionArn + "/invocations",
+            credentialsArn: role.roleArn,
+        })
 
         const connectRoute = new CfnRoute(this, "connect-route", {
             apiId: api.ref,
@@ -141,6 +156,13 @@ class ChatAppStack extends Stack {
             target: "integrations/" + messageIntegration.ref,
         });
 
+        const keepaliveRoute = new CfnRoute(this, "keepalive-route", {
+            apiId: api.ref,
+            routeKey: "keepalive",
+            authorizationType: "NONE",
+            target: "integrations/" + keepaliveIntegration.ref,
+        });
+
         const deployment = new CfnDeployment(this, `${name}-deployment`, {
             apiId: api.ref
         });
@@ -156,6 +178,7 @@ class ChatAppStack extends Stack {
         dependencies.add(connectRoute)
         dependencies.add(disconnectRoute)
         dependencies.add(messageRoute)
+        dependencies.add(keepaliveRoute);
         deployment.node.addDependency(dependencies);
     }
 }
