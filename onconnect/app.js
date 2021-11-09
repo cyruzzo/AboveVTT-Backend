@@ -14,6 +14,7 @@ exports.handler = async event => {
     Item: {
       campaignId: campaignId,
       objectId: objectId,
+      connectionId: event.requestContext.connectionId,
       timestamp: Date.now(),
     }
   };

@@ -34,6 +34,14 @@ class ChatAppStack extends Stack {
             removalPolicy: RemovalPolicy.RETAIN,
         });
 
+        table.addGlobalSecondaryIndex({
+            indexName: "connectionIds",
+            partitionKey: {
+                name: "connectionId",
+                type: AttributeType.STRING,
+            },
+        });
+
         const connectFunc = new Function(this, 'connect-lambda', {
             code: new AssetCode('./onconnect'),
             handler: 'app.handler',

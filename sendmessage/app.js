@@ -32,11 +32,19 @@ exports.handler = async event => {
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
   
-  const postCalls = connectionData.Items.map(async ({ objectId }) => {
+  let counter=0;
+  const postCalls = connectionData.Items.map(async ({ objectId,timestamp }) => {
     const connectionId= objectId.substring(5); // CONN#ID  to ID
     if(connectionId==senderId){
       return;
     }
+
+    if(timestamp < Date.now()- (1000*60*120)){
+      console.log(`Found expired connection, deleting ${connectionId}`)
+      return ddb.delete({ TableName: TABLE_NAME, Key: { campaignId: campaignId, objectId: objectId } }).promise();
+    }
+
+    counter++;
     const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: event.body }).promise();
     return postCall.catch(function(e){
       if (e.statusCode === 410) {
@@ -45,6 +53,7 @@ exports.handler = async event => {
       }
     });
   });
+  console.log("message queued for "+counter+" connections");
 
   // STORE/UPDATE TOKEN DATA IN DYNAMODB. JFF
   if(recvMessage.eventType=="custom/myVTT/token"){
@@ -88,7 +97,7 @@ exports.handler = async event => {
 
 
   try {
-    await Promise.all(postCalls);
+    await Promise.allSettled(postCalls);
   } catch (e) {
     return { statusCode: 500, body: e.stack };
   }

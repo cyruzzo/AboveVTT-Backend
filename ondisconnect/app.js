@@ -12,22 +12,34 @@ const AWS = require('aws-sdk');
 const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: process.env.AWS_REGION });
 
 exports.handler = async event => {
-
-  const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
-  const objectId=campaignId+"#conn#"+event.requestContext.connectionId;
-
-  const deleteParams = {
+  console.log("trying to delete "+event.requestContext.connectionId);
+  const queryParams = {
     TableName: process.env.TABLE_NAME,
-    Key: {
-      campaignId: campaignId,
-      objectId: objectId,
-    }
+    IndexName: 'connectionIds',
+    KeyConditionExpression: "connectionId = :connectionId",
+    ExpressionAttributeValues: {
+      ":connectionId": event.requestContext.connectionId
+    },
   };
 
+  let toDelete = await ddb.query(queryParams).promise();
+
+  const deleting=toDelete.Items.map(async ({ campaignId,objectId }) => {
+    const deleteParams={
+      TableName: process.env.TABLE_NAME,
+      Key: {
+        campaignId: campaignId,
+        objectId: objectId,
+      }
+    };
+    console.log("Deleting campaignId: "+campaignId+" objectId: "+objectId);
+    return ddb.delete(deleteParams).promise();
+  });
+
   try {
-    await ddb.delete(deleteParams).promise();
-  } catch (err) {
-    return { statusCode: 500, body: 'Failed to disconnect: ' + JSON.stringify(err) };
+    await Promise.allSettled(deleting);
+  } catch (e) {
+    return { statusCode: 500, body: e.stack };
   }
 
   return { statusCode: 200, body: 'Disconnected.' };
