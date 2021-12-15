@@ -12,7 +12,7 @@ exports.handler = async event => {
 
   const campaignId=recvMessage.campaignId;
   const senderId=event.requestContext.connectionId;
-  console.log("Campaign "+campaignId+" Event: "+recvMessage.eventType);
+  console.log("Campaign "+campaignId+" Event: "+recvMessage.eventType+ " requestTimeEpoch: " + event.requestContext.requestTimeEpoch);
 
   try {
     connectionData = await ddb.query({
@@ -31,6 +31,10 @@ exports.handler = async event => {
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
+
+  let recvMessageEdit = JSON.parse(event.body);
+  recvMessageEdit.requestTimeEpoch = String(event.requestContext.requestTimeEpoch);
+  const eventBodySend = JSON.stringify(recvMessageEdit);
   
   let counter=0;
   const postCalls = connectionData.Items.map(async ({ objectId,timestamp }) => {
@@ -45,7 +49,7 @@ exports.handler = async event => {
     }
 
     counter++;
-    const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: event.body }).promise();
+    const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: eventBodySend }).promise();
     return postCall.catch(function(e){
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);
