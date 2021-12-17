@@ -9,6 +9,7 @@ exports.handler = async event => {
 
   const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
   const objectId="conn#"+event.requestContext.connectionId;
+  console.log("Adding "+objectId +" to "+campaignId);
   const putParams = {
     TableName: process.env.TABLE_NAME,
     Item: {
@@ -20,7 +21,9 @@ exports.handler = async event => {
   };
 
   try {
-    await ddb.put(putParams).promise();
+    let result = await ddb.put(putParams).promise();
+    console.log("done?");
+    console.log(result);
   } catch (err) {
     return { statusCode: 500, body: 'Failed to connect: ' + JSON.stringify(err) };
   }

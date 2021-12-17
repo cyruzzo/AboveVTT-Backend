@@ -42,6 +42,18 @@ class ChatAppStack extends Stack {
             },
         });
 
+        table.addGlobalSecondaryIndex({
+            indexName: "sceneProperties",
+            partitionKey: {
+                name: "campaignId",
+                type: AttributeType.STRING,
+            },
+            sortKey:{
+                name: "sceneId",
+                type: AttributeType.STRING
+            },
+        });
+
         const connectFunc = new Function(this, 'connect-lambda', {
             code: new AssetCode('./onconnect'),
             handler: 'app.handler',
