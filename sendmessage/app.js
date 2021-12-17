@@ -173,6 +173,18 @@ async function get_scene(campaignId,sceneId){
     let sceneData=data.Items.find( (element)=> element.objectId=="scenes#"+sceneId+"#scenedata");
     sceneData.data.tokens=[];
     data.Items.filter( (element)=> element.objectId.startsWith("scenes#"+sceneId+"#tokens#")).forEach((element)=>sceneData.data.tokens.push(element.data));
+
+
+    sceneData.data.reveals=[]
+    let fogdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#fogdata");
+    if(fogdata && fogdata.data)
+      sceneData.data.reveals=fogdata.data;
+    sceneData.data.drawings=[]
+    let drawdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawings");
+    if(drawdata && drawdata.data)
+    sceneData.data.drawings=drawdata.data;
+
+
     console.log("returning SceneData");
     return sceneData;
   });
@@ -322,6 +334,39 @@ exports.handler = async event => {
     };
     promises.push(ddb.put(putParams).promise());
   }
+
+  // STORE FOG
+  if(recvMessage.eventType=="custom/myVTT/fogdata"){
+    const objectId="scenes#"+recvMessage.sceneId+"#fogdata";
+    const putParams = {
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        campaignId: campaignId,
+        objectId: objectId,
+        data: recvMessage.data,
+        timestamp: Date.now(),
+      }
+    };
+    promises.push(ddb.put(putParams).promise());
+  }
+
+  // STORE DRAWINGS
+  if(recvMessage.eventType=="custom/myVTT/drawdata"){
+    const objectId="scenes#"+recvMessage.sceneId+"#drawdata";
+    const putParams = {
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        campaignId: campaignId,
+        objectId: objectId,
+        data: recvMessage.data,
+        timestamp: Date.now(),
+      }
+    };
+    promises.push(ddb.put(putParams).promise());
+  }
+
+
+
 
   try {
     await Promise.allSettled(promises);
