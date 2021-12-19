@@ -199,7 +199,7 @@ async function delete_scene(event){
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
-
+  console.log("deleting...");
   return ddb.query({
     TableName: process.env.TABLE_NAME,
     KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
@@ -210,11 +210,14 @@ async function delete_scene(event){
     ProjectionExpression: "objectId"
   }).promise().then(
     function (sceneData){
+      console.log("got the list of objects to delete ");
+      console.log("I have to delete " + sceneData.Items.length + "objects");
       let promises=[];
       for(let i=0;i<sceneData.Items.length;i=i+25){
-        let batch_params=[];
+        let batch_requests=[];
+
         for (let j=i; (j<(i+25)) && (j<sceneData.Items.length) ;j++  ){
-          batch_params.push({
+          batch_requests.push({
             DeleteRequest : {
               Key : {
                   campaignId:campaignId,
@@ -223,6 +226,13 @@ async function delete_scene(event){
           }
           });
         }
+
+        let batch_params={
+          RequestItems: {
+            "abovevtt": batch_requests
+          }
+        };
+
         promises.push(ddb.batchWrite(batch_params).promise());
       }
       return Promise.allSettled(promises);
