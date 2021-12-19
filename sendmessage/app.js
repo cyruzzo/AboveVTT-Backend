@@ -190,6 +190,46 @@ async function get_scene(campaignId,sceneId){
   });
 }
 
+async function delete_scene(event){
+  const recvMessage=JSON.parse(event.body);
+  const campaignId=recvMessage.campaignId;
+
+  const sceneId=recvMessage.data.id;
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
+
+  return ddb.query({
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
+    ExpressionAttributeValues: {
+      ':hkey': campaignId,
+      ':skey': "scenes#"+sceneId
+    },
+    ProjectionExpression: "objectId"
+  }).promise().then(
+    function (sceneData){
+      let promises=[];
+      for(let i=0;i<sceneData.Items.length;i=i+25){
+        let batch_params=[];
+        for (let j=i; (j<(i+25)) && (j<sceneData.Items.length) ;j++  ){
+          batch_params.push({
+            DeleteRequest : {
+              Key : {
+                  campaignId:campaignId,
+                  objectId: sceneData.Items[j].objectId,
+              }
+          }
+          });
+        }
+        promises.push(ddb.batchWrite(batch_params).promise());
+      }
+      return Promise.allSettled(promises);
+    }
+  );
+}
+
 async function get_current_scene_id(campaignId){
   return ddb.get({
     TableName: process.env.TABLE_NAME,
@@ -265,8 +305,29 @@ async function switch_scene(event){
       return Promise.allSettled(promises);
     });
   });
-
 }
+
+async function update_scene(event){
+  const recvMessage=JSON.parse(event.body);
+  const campaignId=recvMessage.campaignId;
+  const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+    apiVersion: '2018-11-29',
+    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+  });
+
+  const objectId="scenes#"+recvMessage.data.id+"#scenedata";
+
+  return ddb.put({
+    TableName: process.env.TABLE_NAME,
+    Item: {
+       campaignId: campaignId,
+       objectId: objectId,
+       data: recvMessage.data,
+       sceneId: recvMessage.data.id
+    }
+  }).promise();
+}
+
 
 async function handle_player_join(event){
   const recvMessage=JSON.parse(event.body);
@@ -316,6 +377,10 @@ exports.handler = async event => {
     promises.push(switch_scene(event));
     doForwardMessage=false;
   }
+  if(recvMessage.eventType=="custom/myVTT/update_scene"){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
+    promises.push(update_scene(event));
+    doForwardMessage=false;
+  }
 
   if(doForwardMessage)
     promises.push(forwardMessage(event)); // FORWARD THE MESSAGE TO ALL THE OTHER USERS
@@ -333,6 +398,23 @@ exports.handler = async event => {
       }
     };
     promises.push(ddb.put(putParams).promise());
+  }
+
+  // DELETE TOKEN
+  if(recvMessage.eventType=="custom/myVTT/delete_token"){
+    const objectId="scenes#"+recvMessage.sceneId+"#tokens#"+recvMessage.data.id;
+    const delParams = {
+      TableName: process.env.TABLE_NAME,
+      Key: {
+        campaignId: campaignId,
+        objectId: objectId,
+      }
+    };
+    promises.push(ddb.delete(delParams).promise());
+  }
+
+  if(recvMessage.eventType=="custom/myVTT/delete_scene"){
+    promises.push(delete_scene(event));
   }
 
   // STORE FOG
@@ -365,7 +447,10 @@ exports.handler = async event => {
     promises.push(ddb.put(putParams).promise());
   }
 
-
+  if(recvMessage.eventType=="custom/myVTT/update_scene"){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
+    update_scene(event);
+    doForwardMessage=false;
+  }
 
 
   try {
