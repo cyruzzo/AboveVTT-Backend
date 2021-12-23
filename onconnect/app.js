@@ -8,7 +8,17 @@ const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10', region: 
 exports.handler = async event => {
 
   const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
-  const objectId="conn#"+event.requestContext.connectionId;
+
+  const isDM=event.queryStringParameters && event.queryStringParameters.DM;
+
+
+  let objectid="";
+  if(isDM){
+    objectId="conn#DM#"+event.requestContext.connectionId;
+  }
+  else{
+    objectId="conn#PLAYERS#"+event.requestContext.connectionId;
+  }
   console.log("Adding "+objectId +" to "+campaignId);
   const putParams = {
     TableName: process.env.TABLE_NAME,

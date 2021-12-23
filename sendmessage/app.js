@@ -34,8 +34,7 @@ function forwardMessage(event){
     const eventBodySend = JSON.stringify(recvMessageEdit);
     
     let counter=0;
-    const postCalls = connectionData.Items.map(async ({ objectId,timestamp }) => {
-      const connectionId= objectId.substring(5); // CONN#ID  to ID
+    const postCalls = connectionData.Items.map(async ({ objectId,connectionId,timestamp }) => {
       if(connectionId==senderId){
         return;
       }
@@ -61,7 +60,7 @@ function forwardMessage(event){
 
 }
 
-// this function grabs the sceneLists, or it creates it if needed
+// this function grabs the sceneLists, or it creates it if needed and also send the currente scene
 async function sendSceneList(event){
   const recvMessage=JSON.parse(event.body);
   const campaignId=recvMessage.campaignId;
@@ -126,6 +125,26 @@ async function sendSceneList(event){
         }).promise()
       );
 
+      promises.push(
+        ddb.put({
+          TableName: process.env.TABLE_NAME,
+          Item: {
+            campaignId: campaignId,
+            objectId: "dmscene",
+            data: "666",
+          }
+        }).promise()
+      );
+      promises.push(
+        ddb.put({
+          TableName: process.env.TABLE_NAME,
+          Item: {
+            campaignId: campaignId,
+            objectId: "playerscene",
+            data: "666",
+          }
+        }).promise()
+      )
     }
 
     // send the sceneList back to the DM
@@ -135,8 +154,9 @@ async function sendSceneList(event){
     }
     promises.push(apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(sceneListMsg) }).promise());
 
+    // this function also send the current scene data to the master
     promises.push(
-      get_current_scene_id(campaignId).then(
+      get_current_scene_id(campaignId,true).then(
           (sceneId) => {
             console.log("The Current Scene id is "+ sceneId);
             return get_scene(campaignId,sceneId);
@@ -240,12 +260,18 @@ async function delete_scene(event){
   );
 }
 
-async function get_current_scene_id(campaignId){
+async function get_current_scene_id(campaignId,get_dm_scene){
+  let objectId="";
+  if(get_dm_scene)
+    objectId="dmscene";
+  else
+    objectId="playerscene";
+
   return ddb.get({
     TableName: process.env.TABLE_NAME,
     Key: {
       campaignId: campaignId,
-      objectId: "currentScene"
+      objectId: objectId
     }
   }).promise().then(function(data){
     if(data.Item){
@@ -256,8 +282,6 @@ async function get_current_scene_id(campaignId){
       console.log("didn't found the current scene");
       return null;
     }
-
-
   });
 }
 
@@ -266,6 +290,9 @@ async function switch_scene(event){
   const recvMessage=JSON.parse(event.body);
   const sceneId=recvMessage.data.sceneId;
   const campaignId=recvMessage.campaignId;
+
+  const switch_dm=recvMessage.data.switch_dm?true:false;
+
   console.log("executing switch_scene , searchign for " + campaignId + " and scene "+sceneId);
 
   return get_scene(campaignId,sceneId).then(function(sceneData){
@@ -277,7 +304,7 @@ async function switch_scene(event){
       KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
       ExpressionAttributeValues: {
         ':hkey': campaignId,
-        ':skey': "conn#"
+        ':skey': "conn#" + (switch_dm?"DM#":"PLAYERS#")
       },
     }).promise().then(function(connectionData){ // STEP 3 CREATE THE "scene" MESSAGE AND SEND IT TO EVERYONE (including the sender)
       console.log("Got connectiondata");
@@ -292,8 +319,7 @@ async function switch_scene(event){
         data: sceneData.data,
       };
 
-      const promises = connectionData.Items.map(async ({ objectId,timestamp }) => {
-        const connectionId= objectId.substring(5); // CONN#ID  to ID
+      const promises = connectionData.Items.map(async ({ objectId,connectionId,timestamp }) => {
         const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(message) }).promise();
         return postCall.catch(function(e){ 
         });
@@ -306,7 +332,7 @@ async function switch_scene(event){
           TableName: process.env.TABLE_NAME,
           Item: {
             campaignId: campaignId,
-            objectId: "currentScene",
+            objectId: switch_dm? "dmscene":"playerscene",
             data: sceneId,
           }
         }).promise()
@@ -320,6 +346,7 @@ async function switch_scene(event){
 async function update_scene(event){
   const recvMessage=JSON.parse(event.body);
   const campaignId=recvMessage.campaignId;
+  let promises=[];
   const apigwManagementApi = new AWS.ApiGatewayManagementApi({
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
@@ -327,7 +354,19 @@ async function update_scene(event){
 
   const objectId="scenes#"+recvMessage.data.id+"#scenedata";
 
-  return ddb.put({
+  if(recvMessage.data.isnewscene){
+    delete recvMessage.data.isnewscene;
+    promises.push(ddb.put({ // also initialize fog data
+      TableName: process.env.TABLE_NAME,
+        Item: {
+          campaignId: campaignId,
+          objectId: "scenes#"+recvMessage.data.id+"#fogdata",
+          data: [[0, 0, 0, 0, 2, 0]],
+        }
+    }).promise());
+  }
+
+  promises.push(ddb.put({
     TableName: process.env.TABLE_NAME,
     Item: {
        campaignId: campaignId,
@@ -335,7 +374,9 @@ async function update_scene(event){
        data: recvMessage.data,
        sceneId: recvMessage.data.id
     }
-  }).promise();
+  }).promise());
+  
+  return Promise.allSettled(promises);
 }
 
 
@@ -346,7 +387,7 @@ async function handle_player_join(event){
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
-  get_current_scene_id(campaignId).then(
+  get_current_scene_id(campaignId,false).then(
     (sceneId) => {
       console.log("The Current Scene id is "+ sceneId);
       return get_scene(campaignId,sceneId);
