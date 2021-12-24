@@ -108,7 +108,8 @@ async function sendSceneList(event){
         fpsq: "5",
         offsetx: 29,
         offsety: 54,
-        reveals: [[0, 0, 0, 0, 2, 0]]
+        reveals: [[0, 0, 0, 0, 2, 0]],
+        order: Date.now(),
       };
       scenelist=[basicScene];
 
@@ -147,13 +148,17 @@ async function sendSceneList(event){
       )
     }
 
-    // send the sceneList back to the DM
-    const sceneListMsg={
-      eventType: "custom/myVTT/scenelist",
-      data: scenelist,
-    }
-    promises.push(apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(sceneListMsg) }).promise());
 
+    // grab the current player scene so we can tell the DM where the players are!
+    promises.push(get_current_scene_id(campaignId,false).then(function(sceneid){
+      // send the sceneList back to the DM
+      const sceneListMsg={
+        eventType: "custom/myVTT/scenelist",
+        data: scenelist,
+        playersSceneId: sceneid,
+      }
+      return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(sceneListMsg) }).promise();
+    }));
     // this function also send the current scene data to the master
     promises.push(
       get_current_scene_id(campaignId,true).then(
@@ -387,21 +392,19 @@ async function handle_player_join(event){
     apiVersion: '2018-11-29',
     endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
   });
-  get_current_scene_id(campaignId,false).then(
-    (sceneId) => {
+
+  return get_current_scene_id(campaignId,false).then((sceneId) => {
       console.log("The Current Scene id is "+ sceneId);
       return get_scene(campaignId,sceneId);
     }
-  ).then(
-  (sceneData)=>{
-    console.log("sending back the message with the current scene data after a dmjoin")
+  ).then((sceneData)=>{
+    console.log("sending back the message with the current scene data after a playerjoin")
     const message={
       eventType: "custom/myVTT/scene",
       data: sceneData.data,
     };
     return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(message) }).promise();
-  }
-  );
+  });
 }
 
 // REQUEST HANDLER
@@ -421,6 +424,7 @@ exports.handler = async event => {
   }
 
   if(recvMessage.eventType=="custom/myVTT/playerjoin"){ // REPLY WITH THE SCENE LIST
+    console.log("got a player join!");
     promises.push(handle_player_join(event));
   }
 
