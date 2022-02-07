@@ -415,6 +415,7 @@ exports.handler = async event => {
   
   let doForwardMessage=true;
   const campaignId=recvMessage.campaignId;
+  const isCloud=recvMessage.cloud == 1;
   const promises=[];
 
   console.log("Campaign "+campaignId+" Event: "+recvMessage.eventType+ " requestTimeEpoch: " + event.requestContext.requestTimeEpoch);
@@ -437,11 +438,10 @@ exports.handler = async event => {
     doForwardMessage=false;
   }
 
-  if(doForwardMessage)
-    promises.push(forwardMessage(event)); // FORWARD THE MESSAGE TO ALL THE OTHER USERS
+  
 
   // STORE/UPDATE TOKEN DATA IN DYNAMODB. JFF
-  if(recvMessage.eventType=="custom/myVTT/token"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/token")){
     const objectId="scenes#"+recvMessage.sceneId+"#tokens#"+recvMessage.data.id;
     const putParams = {
       TableName: process.env.TABLE_NAME,
@@ -456,7 +456,7 @@ exports.handler = async event => {
   }
 
   // DELETE TOKEN
-  if(recvMessage.eventType=="custom/myVTT/delete_token"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/delete_token")){
     const objectId="scenes#"+recvMessage.sceneId+"#tokens#"+recvMessage.data.id;
     const delParams = {
       TableName: process.env.TABLE_NAME,
@@ -468,12 +468,12 @@ exports.handler = async event => {
     promises.push(ddb.delete(delParams).promise());
   }
 
-  if(recvMessage.eventType=="custom/myVTT/delete_scene"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/delete_scene")){
     promises.push(delete_scene(event));
   }
 
   // STORE FOG
-  if(recvMessage.eventType=="custom/myVTT/fogdata"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/fogdata")){
     const objectId="scenes#"+recvMessage.sceneId+"#fogdata";
     const putParams = {
       TableName: process.env.TABLE_NAME,
@@ -488,7 +488,7 @@ exports.handler = async event => {
   }
 
   // STORE DRAWINGS
-  if(recvMessage.eventType=="custom/myVTT/drawdata"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/drawdata")){
     const objectId="scenes#"+recvMessage.sceneId+"#drawdata";
     const putParams = {
       TableName: process.env.TABLE_NAME,
@@ -502,10 +502,13 @@ exports.handler = async event => {
     promises.push(ddb.put(putParams).promise());
   }
 
-  if(recvMessage.eventType=="custom/myVTT/update_scene"){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/update_scene")){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
     update_scene(event);
     doForwardMessage=false;
   }
+
+  if(doForwardMessage)
+    promises.push(forwardMessage(event)); // FORWARD THE MESSAGE TO ALL THE OTHER USERS
 
 
   try {

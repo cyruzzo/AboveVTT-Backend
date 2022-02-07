@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import {AssetCode, Function, Runtime} from "@aws-cdk/aws-lambda";
-import {CfnApi, CfnDeployment, CfnIntegration, CfnRoute, CfnStage} from "@aws-cdk/aws-apigatewayv2";
+import {Architecture, AssetCode, Function, Runtime} from "@aws-cdk/aws-lambda";
+import {CfnApi, CfnDeployment, CfnIntegration, CfnRoute, CfnStage, CorsHttpMethod, HttpApi, HttpMethod} from "@aws-cdk/aws-apigatewayv2";
+import {HttpLambdaIntegration} from '@aws-cdk/aws-apigatewayv2-integrations';
 import {App, ConcreteDependable, Construct, Duration, RemovalPolicy, Stack, StackProps} from '@aws-cdk/core';
 import {Effect, PolicyStatement, Role, ServicePrincipal} from "@aws-cdk/aws-iam";
 import {AttributeType, BillingMode, Table} from "@aws-cdk/aws-dynamodb";
@@ -53,6 +54,49 @@ class ChatAppStack extends Stack {
                 type: AttributeType.STRING
             },
         });
+
+        const httpApi = new HttpApi(this, 'HttpApi',{
+            corsPreflight:{
+                allowHeaders:[
+                    'Content-Type',
+                ],
+                allowMethods: [
+                    CorsHttpMethod.OPTIONS,
+                    CorsHttpMethod.GET,
+                    CorsHttpMethod.POST,
+                    CorsHttpMethod.PUT,
+                    CorsHttpMethod.PATCH,
+                    CorsHttpMethod.DELETE,
+                  ],
+                allowOrigins:['*'],
+            }
+        });
+
+        const abovevttServicesFunc = new Function(this,"abovevtt-services-lambda",{
+            code: new AssetCode('./abovevttServices'),
+            architecture: Architecture.X86_64,
+            handler: 'app.handler',
+            runtime: Runtime.NODEJS_12_X,
+            timeout: Duration.seconds(30),
+            memorySize: 256,
+            environment: {
+                "TABLE_NAME": tableName,
+            }
+        });
+        table.grantReadWriteData(abovevttServicesFunc);
+
+        const abovevttServicesIntegration=new HttpLambdaIntegration('abovevttServices',abovevttServicesFunc,{
+        });
+
+        httpApi.addRoutes({
+            path: '/services',
+            methods: [ HttpMethod.GET , HttpMethod.PUT, HttpMethod.POST],
+            integration: abovevttServicesIntegration,
+          });
+        
+
+
+        
 
         const connectFunc = new Function(this, 'connect-lambda', {
             code: new AssetCode('./onconnect'),
