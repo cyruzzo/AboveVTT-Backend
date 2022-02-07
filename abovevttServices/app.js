@@ -17,7 +17,9 @@ exports.handler = async event => {
         campaignId: campaignId,
         objectId: 'campaigndata'
       }
-    }).promise();
+    }).promise().catch(function(){
+      return {};
+    });
   }
 
   if(action=="setCampaignData"){
@@ -36,7 +38,6 @@ exports.handler = async event => {
       }
     }).promise();
   }
-
 
   return { statusCode: 200, body: 'unknown action' };
 };

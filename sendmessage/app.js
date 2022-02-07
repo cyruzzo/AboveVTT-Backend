@@ -420,20 +420,20 @@ exports.handler = async event => {
 
   console.log("Campaign "+campaignId+" Event: "+recvMessage.eventType+ " requestTimeEpoch: " + event.requestContext.requestTimeEpoch);
 
-  if(recvMessage.eventType=="custom/myVTT/dmjoin"){ // REPLY WITH THE SCENE LIST
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/dmjoin")){ // REPLY WITH THE SCENE LIST
     promises.push(sendSceneList(event));
   }
 
-  if(recvMessage.eventType=="custom/myVTT/playerjoin"){ // REPLY WITH THE SCENE LIST
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/playerjoin")){ // REPLY WITH THE SCENE LIST
     console.log("got a player join!");
     promises.push(handle_player_join(event));
   }
 
-  if(recvMessage.eventType=="custom/myVTT/switch_scene"){
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/switch_scene")){
     promises.push(switch_scene(event));
     doForwardMessage=false;
   }
-  if(recvMessage.eventType=="custom/myVTT/update_scene"){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
+  if(isCloud && (recvMessage.eventType=="custom/myVTT/update_scene")){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
     promises.push(update_scene(event));
     doForwardMessage=false;
   }
@@ -501,7 +501,7 @@ exports.handler = async event => {
     };
     promises.push(ddb.put(putParams).promise());
   }
-
+// 
   if(isCloud && (recvMessage.eventType=="custom/myVTT/update_scene")){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
     update_scene(event);
     doForwardMessage=false;
