@@ -84,7 +84,10 @@ async function sendSceneList(event){
 
   return getSceneList.then(function(getReply){
     let scenelist=[];
+
     let promises=[];
+    let force_scene=null;
+
     if(getReply.Items.length>0){
       console.log("DMjoin, found some scenes. I'll send them");
       console.log(getReply.Items)
@@ -92,6 +95,7 @@ async function sendSceneList(event){
     }
     else{ // generate an empty scenelist
       console.log("generating empty scene");
+      force_scene=666;
       let basicScene={
         id:'666',
         title: "The Tavern",
@@ -111,6 +115,7 @@ async function sendSceneList(event){
         reveals: [[0, 0, 0, 0, 2, 0]],
         order: Date.now(),
       };
+      
       scenelist=[basicScene];
 
       promises.push(
@@ -125,6 +130,15 @@ async function sendSceneList(event){
           }
         }).promise()
       );
+
+      promises.push(ddb.put({ // also initialize fog data
+        TableName: process.env.TABLE_NAME,
+          Item: {
+            campaignId: campaignId,
+            objectId: "scenes#"+basicScene.id+"#fogdata",
+            data: [[0, 0, 0, 0, 2, 0]],
+          }
+      }).promise());
 
       promises.push(
         ddb.put({
@@ -150,7 +164,7 @@ async function sendSceneList(event){
 
 
     // grab the current player scene so we can tell the DM where the players are!
-    promises.push(get_current_scene_id(campaignId,false).then(function(sceneid){
+    promises.push(get_current_scene_id(campaignId,false,force_scene).then(function(sceneid){
       // send the sceneList back to the DM
       const sceneListMsg={
         eventType: "custom/myVTT/scenelist",
@@ -159,13 +173,15 @@ async function sendSceneList(event){
       }
       return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(sceneListMsg) }).promise();
     }));
-    // this function also send the current scene data to the master
-    promises.push(
-      get_current_scene_id(campaignId,true).then(
-          (sceneId) => {
-            console.log("The Current Scene id is "+ sceneId);
-            return get_scene(campaignId,sceneId);
-          }
+      
+
+    return Promise.allSettled(promises).then(
+        () => get_current_scene_id(campaignId,true,force_scene)
+      ).then(
+        (sceneId) => {
+          console.log("The Current Scene id is "+ sceneId);
+          return get_scene(campaignId,sceneId);
+        }
       ).then(
         (sceneData)=>{
           console.log("sending back the message with the current scene data after a dmjoin")
@@ -175,12 +191,7 @@ async function sendSceneList(event){
           };
           return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(message) }).promise();
         }
-      )
-    );
-
-
-
-    return Promise.allSettled(promises);
+      );
   });
 }
 
@@ -265,7 +276,9 @@ async function delete_scene(event){
   );
 }
 
-async function get_current_scene_id(campaignId,get_dm_scene){
+async function get_current_scene_id(campaignId,get_dm_scene,forced=null){
+  if(forced!=null)
+    return forced;
   let objectId="";
   if(get_dm_scene)
     objectId="dmscene";
