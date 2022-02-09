@@ -105,7 +105,7 @@ exports.handler = async event => {
         PutRequest: {
           Item: {
             campaignId: campaignId,
-            objectId: "scenes#"+scene.id+"#drawings",
+            objectId: "scenes#"+scene.id+"#drawdata",
             data:drawData,
             timestamp: Date.now(),
           }

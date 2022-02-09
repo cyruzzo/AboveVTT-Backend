@@ -216,7 +216,7 @@ async function get_scene(campaignId,sceneId){
     if(fogdata && fogdata.data)
       sceneData.data.reveals=fogdata.data;
     sceneData.data.drawings=[]
-    let drawdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawings");
+    let drawdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawdata");
     if(drawdata && drawdata.data)
     sceneData.data.drawings=drawdata.data;
 
