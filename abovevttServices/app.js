@@ -70,6 +70,7 @@ exports.handler = async event => {
     console.log(scenes);
     let requests=[];
 
+    let nextorder=1000000;
     scenes.forEach(scene => {
       let fogData=scene.reveals;
       let drawData=scene.drawings;
@@ -77,6 +78,11 @@ exports.handler = async event => {
       scene.reveals=[];
       scene.drawings=[];
       scene.tokens={};
+
+      if(!scene.order){
+        scene.order=nextorder;
+        nextorder=nextorder+1000000;
+      }
 
       requests.push({
         PutRequest: {
@@ -208,7 +214,7 @@ exports.handler = async event => {
               scene.reveals=fogdata.data;
             console.log("got this fog");
             console.log(fogdata);
-            let drawdata=sceneObjects.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawings");
+            let drawdata=sceneObjects.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawdata");
 
             if(drawdata && drawdata.data)
               scene.drawings=drawdata.data;
