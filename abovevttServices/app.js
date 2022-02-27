@@ -71,6 +71,7 @@ exports.handler = async event => {
     let requests=[];
 
     let nextorder=1000000;
+    let nextid=100;
     scenes.forEach(scene => {
       let fogData=scene.reveals;
       let drawData=scene.drawings;
@@ -82,6 +83,11 @@ exports.handler = async event => {
       if(!scene.order){
         scene.order=nextorder;
         nextorder=nextorder+1000000;
+      }
+
+      if(!scene.id){
+        scene.id="migrated"+nextid;
+        nextid=nextid+100;
       }
 
       requests.push({
