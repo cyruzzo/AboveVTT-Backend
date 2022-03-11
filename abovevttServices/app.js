@@ -241,7 +241,35 @@ exports.handler = async event => {
     
   }
 
+  if(action=="getCustomTokens"){
+    const userKey=event.queryStringParameters?event.queryStringParameters.userKey:"";
+    return ddb.get({
+      TableName: process.env.TABLE_NAME,
+      Key: {
+        userKey: userKey,
+        objectId: 'customtokens'
+      }
+    }).promise().catch(function(){
+      return {};
+    });
+  }
 
+  if(action=="setCustomTokens"){
+    const userKey=event.queryStringParameters?event.queryStringParameters.userKey:"";
+    console.log("logging full event diocane");
+    console.log(event);
+    const customTokenData=JSON.parse(event.body);
+
+    return ddb.put({
+      TableName: process.env.TABLE_NAME,
+      Item: {
+        userKey: userKey,
+        objectId: "customtokens",
+        data: customTokenData,
+        timestamp: Date.now(),
+      }
+    }).promise();
+  }
 
 
 
