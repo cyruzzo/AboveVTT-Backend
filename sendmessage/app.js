@@ -393,7 +393,28 @@ async function update_scene(event){
        sceneId: recvMessage.data.id
     }
   }).promise());
-  
+
+  const switch_dm = recvMessage.data.id === recvMessage.sceneId;
+  if (switch_dm) {
+    promises.push(switch_scene({
+      campaignId: recvMessage.campaignId,
+      data: {
+        sceneId: recvMessage.data.id,
+        switch_dm: true
+      }
+    }));
+  }
+
+  const switch_players = recvMessage.data.id === recvMessage.playersSceneId;
+  if (switch_players) {
+    promises.push(switch_scene({
+      campaignId: recvMessage.campaignId,
+      data: {
+        sceneId: recvMessage.data.id
+      }
+    }));
+  }
+
   return Promise.allSettled(promises);
 }
 
