@@ -11,3 +11,6 @@ cdk.out
 
 # Parcel default cache directory
 .parcel-cache
+
+# Intellij Idea
+.idea
