@@ -196,8 +196,9 @@ async function sendSceneList(event){
 }
 
 async function get_scene(campaignId,sceneId){
+  console.log("get_scene running on " + TABLE_NAME +"campaignId "+campaignId +" sceneId "+sceneId);
   return ddb.query({
-    TableName: process.env.TABLE_NAME,
+    TableName: TABLE_NAME,
     KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
     ExpressionAttributeValues: {
       ':hkey': campaignId,
@@ -223,6 +224,9 @@ async function get_scene(campaignId,sceneId){
 
     console.log("returning SceneData");
     return sceneData;
+  }).catch(function(e){
+    console.log("SOMETHING WENT WRONG ON GET_SCENE");
+    console.log(e);
   });
 }
 
@@ -395,27 +399,36 @@ async function update_scene(event){
   }).promise());
 
   const switch_dm = recvMessage.data.id === recvMessage.sceneId;
+
   if (switch_dm) {
-    promises.push(switch_scene({
+    console.log("forcing dm update fater update_scene");
+    let fakeEventBody={
       campaignId: recvMessage.campaignId,
       data: {
         sceneId: recvMessage.data.id,
         switch_dm: true
       }
-    }));
+    };
+    let fakeEvent=Object.assign({}, event);
+    fakeEvent.body=JSON.stringify(fakeEventBody);
+    promises.push(switch_scene(fakeEvent));
   }
 
   const switch_players = recvMessage.data.id === recvMessage.playersSceneId;
   if (switch_players) {
-    promises.push(switch_scene({
+    console.log("forcing players update after update_scene");
+    let fakeEventBody={
       campaignId: recvMessage.campaignId,
       data: {
         sceneId: recvMessage.data.id
       }
-    }));
+    };
+    let fakeEvent=Object.assign({}, event);
+    fakeEvent.body=JSON.stringify(fakeEventBody);
+    promises.push(switch_scene(fakeEvent));
   }
 
-  return Promise.allSettled(promises);
+  return Promise.allSettled(promises).then((statuses)=>{console.log("statuses from update_scene");console.log(statuses)});
 }
 
 
@@ -467,12 +480,6 @@ exports.handler = async event => {
     promises.push(switch_scene(event));
     doForwardMessage=false;
   }
-  if(isCloud && (recvMessage.eventType=="custom/myVTT/update_scene")){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
-    promises.push(update_scene(event));
-    doForwardMessage=false;
-  }
-
-  
 
   // STORE/UPDATE TOKEN DATA IN DYNAMODB. JFF
   if(isCloud && (recvMessage.eventType=="custom/myVTT/token")){
@@ -537,7 +544,7 @@ exports.handler = async event => {
   }
 // 
   if(isCloud && (recvMessage.eventType=="custom/myVTT/update_scene")){ // THIS WILL CREATE OR UPDATE A SCENE (AND OPTIONALLY FORCE A SYNC FOR THE PLAYERS)
-    update_scene(event);
+    promises.push(update_scene(event));
     doForwardMessage=false;
   }
 
