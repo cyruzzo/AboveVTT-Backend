@@ -388,7 +388,7 @@ async function update_scene(event){
     }).promise());
   }
 
-  promises.push(ddb.put({
+  await ddb.put({
     TableName: process.env.TABLE_NAME,
     Item: {
        campaignId: campaignId,
@@ -396,7 +396,7 @@ async function update_scene(event){
        data: recvMessage.data,
        sceneId: recvMessage.data.id
     }
-  }).promise());
+  }).promise();
 
   const switch_dm = recvMessage.data.id === recvMessage.sceneId;
 
