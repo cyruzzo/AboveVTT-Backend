@@ -241,6 +241,21 @@ exports.handler = async event => {
     
   }
 
+  if(action=="getScene"){
+    const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
+    const sceneId=event.queryStringParameters?event.queryStringParameters.scene:"";
+
+    return ddb.query({
+      TableName: "abovevtt",
+      KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
+      ExpressionAttributeValues: {
+        ':hkey': campaignId,
+        ':skey': "scenes#"+sceneId
+      },
+    }).promise().then(
+      (data)=>{return data.Items}
+    );
+  }
 
 
 
