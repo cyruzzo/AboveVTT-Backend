@@ -253,7 +253,25 @@ exports.handler = async event => {
         ':skey': "scenes#"+sceneId
       },
     }).promise().then(
-      (data)=>{return data.Items}
+      (data)=>{console.log("got SceneData");
+      console.log(data);
+      let sceneData=data.Items.find( (element)=> element.objectId=="scenes#"+sceneId+"#scenedata");
+      sceneData.data.tokens=[];
+      data.Items.filter( (element)=> element.objectId.startsWith("scenes#"+sceneId+"#tokens#")).forEach((element)=>sceneData.data.tokens.push(element.data));
+  
+  
+      sceneData.data.reveals=[]
+      let fogdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#fogdata");
+      if(fogdata && fogdata.data)
+        sceneData.data.reveals=fogdata.data;
+      sceneData.data.drawings=[]
+      let drawdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawdata");
+      if(drawdata && drawdata.data)
+      sceneData.data.drawings=drawdata.data;
+  
+  
+      console.log("returning SceneData");
+      return sceneData;}
     );
   }
 
