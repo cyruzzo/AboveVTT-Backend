@@ -180,53 +180,14 @@ async function sendSceneList(event){
       ).then(
         (sceneId) => {
           console.log("The Current Scene id is "+ sceneId);
-          return get_scene(campaignId,sceneId);
-        }
-      ).then(
-        (sceneData)=>{
           console.log("sending back the message with the current scene data after a dmjoin")
           const message={
-            eventType: "custom/myVTT/scene",
-            data: sceneData.data,
+            eventType: "custom/myVTT/fetchscene",
+            data: {sceneid:sceneId},
           };
           return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(message) }).promise();
         }
       );
-  });
-}
-
-async function get_scene(campaignId,sceneId){
-  console.log("get_scene running on " + TABLE_NAME +"campaignId "+campaignId +" sceneId "+sceneId);
-  return ddb.query({
-    TableName: TABLE_NAME,
-    KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
-    ExpressionAttributeValues: {
-      ':hkey': campaignId,
-      ':skey': "scenes#"+sceneId
-    },
-  }).promise().then(function(data){ // STEP 2.1 PACK TOKENS INTO THE SCENE DATA
-    console.log("got SceneData");
-    console.log(data);
-    let sceneData=data.Items.find( (element)=> element.objectId=="scenes#"+sceneId+"#scenedata");
-    sceneData.data.tokens=[];
-    data.Items.filter( (element)=> element.objectId.startsWith("scenes#"+sceneId+"#tokens#")).forEach((element)=>sceneData.data.tokens.push(element.data));
-
-
-    sceneData.data.reveals=[]
-    let fogdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#fogdata");
-    if(fogdata && fogdata.data)
-      sceneData.data.reveals=fogdata.data;
-    sceneData.data.drawings=[]
-    let drawdata=data.Items.find((element) => element.objectId=="scenes#"+sceneId+"#drawdata");
-    if(drawdata && drawdata.data)
-    sceneData.data.drawings=drawdata.data;
-
-
-    console.log("returning SceneData");
-    return sceneData;
-  }).catch(function(e){
-    console.log("SOMETHING WENT WRONG ON GET_SCENE");
-    console.log(e);
   });
 }
 
@@ -317,51 +278,48 @@ async function switch_scene(event){
 
   console.log("executing switch_scene , searchign for " + campaignId + " and scene "+sceneId);
 
-  return get_scene(campaignId,sceneId).then(function(sceneData){
-
-    console.log(sceneData);
-
-    return ddb.query({ // STEPE 2.2 AND GET ALL CONNECTIONS
-      TableName: process.env.TABLE_NAME,
-      KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
-      ExpressionAttributeValues: {
-        ':hkey': campaignId,
-        ':skey': "conn#" + (switch_dm?"DM#":"PLAYERS#")
-      },
-    }).promise().then(function(connectionData){ // STEP 3 CREATE THE "scene" MESSAGE AND SEND IT TO EVERYONE (including the sender)
-      console.log("Got connectiondata");
-      console.log(connectionData);
-      const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-        apiVersion: '2018-11-29',
-        endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
-      });
-
-      const message={
-        eventType: "custom/myVTT/scene",
-        data: sceneData.data,
-      };
-
-      const promises = connectionData.Items.map(async ({ objectId,connectionId,timestamp }) => {
-        const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(message) }).promise();
-        return postCall.catch(function(e){ 
-        });
-      });
-
-      // STEP 3.1 ALSO STORE THE CURRENT SCENE ID
-
-      promises.push(
-        ddb.put({
-          TableName: process.env.TABLE_NAME,
-          Item: {
-            campaignId: campaignId,
-            objectId: switch_dm? "dmscene":"playerscene",
-            data: sceneId,
-          }
-        }).promise()
-      );
-
-      return Promise.allSettled(promises);
+  return ddb.query({ // STEPE 1 get All connections based on DM / PLAYER SWITCH
+    TableName: process.env.TABLE_NAME,
+    KeyConditionExpression: "campaignId = :hkey and begins_with(objectId,:skey)",
+    ExpressionAttributeValues: {
+      ':hkey': campaignId,
+      ':skey': "conn#" + (switch_dm ? "DM#" : "PLAYERS#")
+    },
+  }).promise().then(function (connectionData) { 
+    // STEP 2.1 CREATE THE "scene" MESSAGE AND SEND IT TO EVERYONE (including the sender if needed)
+    console.log("Got connectiondata");
+    console.log(connectionData);
+    const apigwManagementApi = new AWS.ApiGatewayManagementApi({
+      apiVersion: '2018-11-29',
+      endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
     });
+
+    const message = {
+      eventType: "custom/myVTT/fetchscene",
+      data: {
+        sceneid: sceneId
+      },
+    };
+
+    const promises = connectionData.Items.map(async ({ objectId, connectionId, timestamp }) => {
+      const postCall = apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(message) }).promise();
+      return postCall.catch(function (e) {
+      });
+    });
+
+    // STEP 2.2 ALSO STORE THE CURRENT SCENE ID
+    promises.push(
+      ddb.put({
+        TableName: process.env.TABLE_NAME,
+        Item: {
+          campaignId: campaignId,
+          objectId: switch_dm ? "dmscene" : "playerscene",
+          data: sceneId,
+        }
+      }).promise()
+    );
+
+    return Promise.allSettled(promises);
   });
 }
 
@@ -441,14 +399,10 @@ async function handle_player_join(event){
   });
 
   return get_current_scene_id(campaignId,false).then((sceneId) => {
-      console.log("The Current Scene id is "+ sceneId);
-      return get_scene(campaignId,sceneId);
-    }
-  ).then((sceneData)=>{
     console.log("sending back the message with the current scene data after a playerjoin")
     const message={
-      eventType: "custom/myVTT/scene",
-      data: sceneData.data,
+      eventType: "custom/myVTT/fetchscene",
+      data: {sceneid:sceneId},
     };
     return apigwManagementApi.postToConnection({ ConnectionId: event.requestContext.connectionId, Data: JSON.stringify(message) }).promise();
   });
