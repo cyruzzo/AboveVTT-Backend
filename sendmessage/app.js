@@ -22,8 +22,6 @@ function forwardMessage(event){
       ':skey': "conn#"
     },
   }).promise().then(function(connectionData){
-    console.log("OK. GOT THE CONNECTION DATA");
-    console.log(connectionData);
     const apigwManagementApi = new AWS.ApiGatewayManagementApi({
       apiVersion: '2018-11-29',
       endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
@@ -34,7 +32,27 @@ function forwardMessage(event){
     const eventBodySend = JSON.stringify(recvMessageEdit);
     
     let counter=0;
-    const postCalls = connectionData.Items.map(async ({ objectId,connectionId,timestamp }) => {
+    
+    connectionData.Items.sort( (a,b)=>  b.timestamp -a.timestamp ); // sort by timestamp descending
+
+    const MAX_CONNECTIONS=30;
+    let toDelete=[];
+    if(connectionData.Items.length> MAX_CONNECTIONS){
+      console.log("DELETING OLDER CONNECTIONS EXCEEDING MAX_CONNECTIONS");
+      const numToDelete=connectionData.Items.length-MAX_CONNECTIONS;
+      toDelete=connectionData.Items.splice(-numToDelete,numToDelete);
+    }
+
+    // DELETE CONNECTIONS EXCEEDING MAX_CONNECTIONS SO I DON'T HAVE TO PAY 40$/hour for a single fuck-up
+    const deleteCalls= toDelete.map(({ objectId,connectionId,timestamp }) => {
+      let singleDelPromises=[];
+      singleDelPromises.push(apigwManagementApi.deleteConnection({ConnectionId:connectionId}).promise());
+      singleDelPromises.push(ddb.delete({ TableName: TABLE_NAME, Key: { campaignId: campaignId, objectId: objectId } }).promise());
+      return Promise.allSettled(singleDelPromises);
+    });
+
+
+    const postCalls = connectionData.Items.map(({ objectId,connectionId,timestamp }) => {
       if(connectionId==senderId){
         return;
       }
@@ -43,7 +61,7 @@ function forwardMessage(event){
         return ddb.delete({ TableName: TABLE_NAME, Key: { campaignId: campaignId, objectId: objectId } }).promise();
       }
   
-      counter++;
+      counter++;  
       const postCall=apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: eventBodySend }).promise();
       return postCall.catch(function(e){
         if (e.statusCode === 410) {
@@ -53,9 +71,12 @@ function forwardMessage(event){
       });
     });
     console.log("message queued for "+counter+" connections");
-    return Promise.allSettled(postCalls);
-  }).catch(function(){
+
+    return Promise.allSettled(postCalls.concat(deleteCalls));
+
+  }).catch(function(e){
     console.log('fuck. the query failed');
+    console.log(e);
   });
 
 }
@@ -90,7 +111,6 @@ async function sendSceneList(event){
 
     if(getReply.Items.length>0){
       console.log("DMjoin, found some scenes. I'll send them");
-      console.log(getReply.Items)
       scenelist=getReply.Items.map( (element)=> element.data);
     }
     else{ // generate an empty scenelist
@@ -288,7 +308,6 @@ async function switch_scene(event){
   }).promise().then(function (connectionData) { 
     // STEP 2.1 CREATE THE "scene" MESSAGE AND SEND IT TO EVERYONE (including the sender if needed)
     console.log("Got connectiondata");
-    console.log(connectionData);
     const apigwManagementApi = new AWS.ApiGatewayManagementApi({
       apiVersion: '2018-11-29',
       endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
