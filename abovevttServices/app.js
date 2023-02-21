@@ -275,8 +275,56 @@ exports.handler = async event => {
     );
   }
 
+  
+  if(action=="getSceneList"){
+    const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
+    const queryParams ={
+      TableName: "abovevtt",
+      IndexName: 'sceneProperties',
+      KeyConditionExpression: "campaignId = :hkey",
+      ExpressionAttributeValues: {
+        ':hkey': campaignId,
+      },
+    };
 
+    return ddb.query(queryParams).promise().then(
+      (scenelist)=>{
+        return scenelist;
+      }
+    );
+  }
 
+  if(action=="getCurrentScene"){
+    const campaignId=event.queryStringParameters?event.queryStringParameters.campaign:"";
+    let getDmScene=ddb.get(
+      {
+        TableName: "abovevtt",
+        Key: {
+          campaignId: campaignId,
+          objectId: "dmscene",
+        }
+      }
+    ).promise();
 
+    let getPlayerScene=ddb.get(
+        {
+          TableName: "abovevtt",
+          Key: {
+            campaignId: campaignId,
+            objectId: "playerscene"
+          }
+        }).promise();
+
+    let dmSceneResult=await getDmScene;
+    let playerSceneResult= await getPlayerScene;
+
+    let dmSceneId=dmSceneResult.Item? dmSceneResult.Item.data:"";
+    let playerSceneId=playerSceneResult.Item? playerSceneResult.Item.data:"";
+
+    return {
+      dmscene: dmSceneId,
+      playerscene:playerSceneId,
+    };
+  }
   return { statusCode: 200, body: 'unknown action' };
 };
